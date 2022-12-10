@@ -11,7 +11,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 
-//import org.springframework.data.domain.Example;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,30 +22,22 @@ import org.javatuples.Pair;
 public class CustomerRewardsController {
     private final CustomerTransactionRepository repository;
     private static final Date DEFAULT_BEGIN_OF_DATE_RANGE;
-    private static final Date DEFAULT_END_OF_DATE_RANGE;
-    private static final Date OMITED_BEGIN_OF_DATE_RANGE;
-    private static final Date OMITTED_END_OF_DATE_RANGE; 
+    private static final Date DEFAULT_END_OF_DATE_RANGE; 
     private static final SimpleDateFormat simpleDateFormat;
     
     static {
         simpleDateFormat = new SimpleDateFormat("MM-dd-yyyy");
-        Date beginOfRangeDate = null;
-        Date endOfRangeDate = null;
         Date omittedBeginOfRangeDate = null;
         Date omittedEndOfRangeDate = null;
         
         try {
-            beginOfRangeDate = simpleDateFormat.parse("01-01-2022");
-            endOfRangeDate = simpleDateFormat.parse("03-31-2022");
             omittedBeginOfRangeDate = simpleDateFormat.parse("01-01-1970");
             omittedEndOfRangeDate  = simpleDateFormat.parse("12-31-2122");
         } catch (ParseException pe) {
             throw new RuntimeException("Unable to parse date(s) for begin/end range");
         }
-        DEFAULT_BEGIN_OF_DATE_RANGE = beginOfRangeDate;
-        DEFAULT_END_OF_DATE_RANGE = endOfRangeDate;
-        OMITED_BEGIN_OF_DATE_RANGE = omittedBeginOfRangeDate;
-        OMITTED_END_OF_DATE_RANGE = omittedEndOfRangeDate;
+        DEFAULT_BEGIN_OF_DATE_RANGE = omittedBeginOfRangeDate;
+        DEFAULT_END_OF_DATE_RANGE = omittedEndOfRangeDate;
     }
     
     CustomerRewardsController(CustomerTransactionRepository repository) {
@@ -91,17 +82,16 @@ public class CustomerRewardsController {
         
         if (beginDate != null && endDate == null) {
             // Set parsedEndDate to the far-future.
-            parsedEndDate = OMITTED_END_OF_DATE_RANGE;
+            parsedEndDate = DEFAULT_END_OF_DATE_RANGE;
         } else if (endDate != null && beginDate == null) {
             // Set parsedBeginDate to the distant past.
-            parsedBeginDate = OMITED_BEGIN_OF_DATE_RANGE;
+            parsedBeginDate = DEFAULT_BEGIN_OF_DATE_RANGE;
         }
         
         Map<Integer, CustomerReward> rewardsByCustomerId = 
                 new HashMap<>();
         
-        List<CustomerTransaction> transactions = repository.findByTxDateRange(
-                parsedBeginDate == null ? DEFAULT_BEGIN_OF_DATE_RANGE: parsedBeginDate, 
+        List<CustomerTransaction> transactions = repository.findByTxDateRange(parsedBeginDate == null ? DEFAULT_BEGIN_OF_DATE_RANGE: parsedBeginDate, 
                 parsedEndDate == null ? DEFAULT_END_OF_DATE_RANGE: parsedEndDate);
 
         // Loop through all transactions, creating CustomerReward entries 
@@ -110,7 +100,7 @@ public class CustomerRewardsController {
         Calendar calendar = new GregorianCalendar();
         
         for (CustomerTransaction txn : transactions) {
-            ledger.putIfAbsent(txn.getCustomerId(), new HashMap<Month, Integer>());
+            ledger.putIfAbsent(txn.getCustomerId(), new HashMap<>());
             int txnRewardPoints = calculateRewardPoints(txn.getAmount());
 
             calendar.setTime((Date)txn.getTxDate());
@@ -131,10 +121,10 @@ public class CustomerRewardsController {
         for (Integer customerId : ledger.keySet()) {
             CustomerReward reward = new CustomerReward();
             Map<Month, Integer> customerRewardPointsByMonth = ledger.get(customerId);
-            List<Pair<Month, Integer>> rewardsByMonth = new LinkedList<Pair<Month, Integer>>();
+            List<Pair<Month, Integer>> rewardsByMonth = new LinkedList<>();
 
             for (Month month : customerRewardPointsByMonth.keySet()) {
-                rewardsByMonth.add(new Pair<Month, Integer>(month, customerRewardPointsByMonth.get(month)));
+                rewardsByMonth.add(new Pair<>(month, customerRewardPointsByMonth.get(month)));
             }
             reward.setRewardsByMonth(rewardsByMonth);
             rewardsByCustomerId.put(customerId, reward);
@@ -143,7 +133,7 @@ public class CustomerRewardsController {
         return rewardsByCustomerId;
     }
     
-    private int calculateRewardPoints(Integer amountSpent) {
+    static int calculateRewardPoints(Integer amountSpent) {
         if (amountSpent <= 50) return 0;
         if (amountSpent <= 100) return amountSpent - 50;
         return ((amountSpent - 100) * 2) + 50;
